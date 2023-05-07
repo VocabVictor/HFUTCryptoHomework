@@ -109,11 +109,17 @@ public class RSA extends CryptoAlgorithm {
             int length = Math.min(decryptblockSize, decryptedBlock.length);
             // 将解密后的块拼接到明文中
             if(decryptedBlock[0] == 0) {
+                // 如果解密后的第一个字节为0，则表示有填充，需要去除填充
                 System.arraycopy(decryptedBlock, 1, decryptedMessage, offset, length - 1);
+                // 将去除填充后的数据拷贝到解密后的明文数组中
                 offset += length - 1;
+                // 更新偏移量
             } else {
+                // 如果解密后的第一个字节不为0，则表示没有填充，直接拷贝数据
                 System.arraycopy(decryptedBlock, 0, decryptedMessage, offset, length);
+                // 将解密后的数据拷贝到解密后的明文数组中
                 offset += length;
+                // 更新偏移量
             }
         }
 
