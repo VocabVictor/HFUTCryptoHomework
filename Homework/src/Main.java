@@ -3,6 +3,12 @@ import crypto.RSA;
 import crypto.DES;
 
 public class Main {
+    /**
+     * 主函数，程序入口。
+     *
+     * @param args 命令行参数
+     * @throws IOException 如果发生IO异常
+     */
     public static void main(String[] args) throws IOException {
         try {
             testencryptText(); // 测试加密解密字符串的方法

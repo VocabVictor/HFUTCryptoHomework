@@ -14,117 +14,139 @@ import java.security.SecureRandom;
 import java.util.Arrays;
 
 public class RSA extends CryptoAlgorithm {
+
     // 声明 RSA 需要的三个大整数，分别是 n、e 和 d
     private BigInteger n, e, d;
+
     // 声明分块加密所需的块大小
     private int encryptblockSize, decryptblockSize;
 
-    // 构造函数，初始化 RSA 参数
+    /**
+     * 构造函数，初始化RSA参数。
+     *
+     * @param bits       RSA密钥的位数
+     * @param blockSize  加密和解密时的块大小
+     */
     public RSA(int bits, int blockSize) {
         // 创建安全随机数生成器对象
         SecureRandom random = new SecureRandom();
+
         // 生成两个大素数 p 和 q，每个素数的二进制位数为 bits / 2
         BigInteger p = BigInteger.probablePrime(bits / 2, random);
         BigInteger q = BigInteger.probablePrime(bits / 2, random);
+
         // 计算 n = p * q
         this.n = p.multiply(q);
+
         // 计算 m = (p-1) * (q-1)
         BigInteger m = p.subtract(BigInteger.ONE).multiply(q.subtract(BigInteger.ONE));
+
         // 选择一个 e，使得 e 与 m 的最大公约数为 1，即 e 和 m 互质
         this.e = new BigInteger("65537");
+
         // 计算 d = e^(-1) mod m，即 d 为 e 模 m 的乘法逆元
         this.d = this.e.modInverse(m);
+
         // 根据块大小和密钥长度的关系，设置块大小
-        blockSize = Math.min( ( bits - 1 )  / 8, blockSize);
+        blockSize = Math.min((bits - 1) / 8, blockSize);
+
         // 记录块大小
         this.encryptblockSize = blockSize;
         this.decryptblockSize = n.bitLength() / 8 + 1;
-
     }
 
-    // RSA 加密函数
+    /**
+     * RSA加密函数。
+     *
+     * @param message 要加密的字节数组
+     * @return 加密后的字节数组
+     */
     public byte[] encrypt(byte[] message) {
         // 计算需要分块的块数
         int numBlocks = (message.length + encryptblockSize - 1) / encryptblockSize;
+
         // 计算加密后的字节数组的总长度
         byte[] encryptedMessage = new byte[numBlocks * decryptblockSize];
+
         // 偏移量
         int offset = 0;
+
         // 对明文分块加密
         for (int i = 0; i < numBlocks; i++) {
-            // 计算当前块的长度
-            int len = Math.min(encryptblockSize, message.length - offset);
-            // 截取当前块的字节数组
-            byte[] block = Arrays.copyOfRange(message, offset, offset + len);
-
-            // 将块转化为大整数
-            BigInteger blockBigInt = new BigInteger(1, block);
-
-            // 计算加密后的大整数
-            BigInteger encryptedBlockBigInt = blockBigInt.modPow(e, n);
-            // 将加密后的大整数转化为字节数组
-            byte[] encryptedBlock = encryptedBlockBigInt.toByteArray();
-
-            BigInteger temp = encryptedBlockBigInt.modPow(d, n);
-
-            // 如果加密后的块长度小于块的长度，则进行填充
-            if (encryptedBlock.length < decryptblockSize) {
-                // 创建填充后的字节数组
-                byte[] paddedBlock = new byte[decryptblockSize];
-                // 将加密后的块拼接到填充后的字节数数组
-                System.arraycopy(encryptedBlock, 0, paddedBlock, decryptblockSize - encryptedBlock.length,
-                        encryptedBlock.length);
-                encryptedBlock = paddedBlock;
-            }
-
-            // 将加密后的块拼接到密文中
+            byte[] encryptedBlock = encryptBlock(Arrays.copyOfRange(message, offset, offset + Math.min(encryptblockSize, message.length - offset)));
             System.arraycopy(encryptedBlock, 0, encryptedMessage, i * decryptblockSize, decryptblockSize);
-            // 更新偏移量
             offset += encryptblockSize;
-
         }
-
 
         return encryptedMessage;
     }
 
-    // RSA 解密函数
+    /**
+     * 对单个块进行加密
+     *
+     * @param block 要加密的块的字节数组
+     * @return 加密后的字节数组
+     */
+    private byte[] encryptBlock(byte[] block) {
+        BigInteger blockBigInt = new BigInteger(1, block);
+        BigInteger encryptedBlockBigInt = blockBigInt.modPow(e, n);
+        byte[] encryptedBlock = encryptedBlockBigInt.toByteArray();
+
+        if (encryptedBlock.length < decryptblockSize) {
+            byte[] paddedBlock = new byte[decryptblockSize];
+            System.arraycopy(encryptedBlock, 0, paddedBlock, decryptblockSize - encryptedBlock.length, encryptedBlock.length);
+            encryptedBlock = paddedBlock;
+        }
+
+        return encryptedBlock;
+    }
+
+
+
+    /**
+     * RSA解密函数。
+     *
+     * @param encryptedMessage 要解密的字节数组
+     * @return 解密后的字节数组
+     */
     public byte[] decrypt(byte[] encryptedMessage) {
         // 计算需要分块的块数
         int numBlocks = encryptedMessage.length / decryptblockSize;
+
         // 创建解密后的字节数组
         byte[] decryptedMessage = new byte[numBlocks * decryptblockSize];
         int offset = 0;
+
         // 对密文分块解密
         for (int i = 0; i < numBlocks; i++) {
-            // 获取当前块的密文
-            byte[] block = Arrays.copyOfRange(encryptedMessage, i * decryptblockSize, (i + 1) * decryptblockSize);
-            // 将密文转化为大整数
-            BigInteger encryptedBlockBigInt = new BigInteger(1, block);
-            // 计算解密后的大整数
-            BigInteger decryptedBlockBigInt = encryptedBlockBigInt.modPow(d, n);
-            // 将解密后的大整数转化为字节数组
-            byte[] decryptedBlock = decryptedBlockBigInt.toByteArray();
-            // 计算解密后的块长度
+            byte[] decryptedBlock = decryptBlock(Arrays.copyOfRange(encryptedMessage, i * decryptblockSize, (i + 1) * decryptblockSize));
             int length = Math.min(decryptblockSize, decryptedBlock.length);
-            // 将解密后的块拼接到明文中
-            if(decryptedBlock[0] == 0) {
-                // 如果解密后的第一个字节为0，则表示有填充，需要去除填充
+
+            if (decryptedBlock[0] == 0) {
                 System.arraycopy(decryptedBlock, 1, decryptedMessage, offset, length - 1);
-                // 将去除填充后的数据拷贝到解密后的明文数组中
                 offset += length - 1;
-                // 更新偏移量
             } else {
-                // 如果解密后的第一个字节不为0，则表示没有填充，直接拷贝数据
                 System.arraycopy(decryptedBlock, 0, decryptedMessage, offset, length);
-                // 将解密后的数据拷贝到解密后的明文数组中
                 offset += length;
-                // 更新偏移量
             }
         }
 
-        // 截掉填充的字节
         return Arrays.copyOfRange(decryptedMessage, 0, offset);
     }
+
+    /**
+     * 对单个块进行解密
+     *
+     * @param block 要解密的块的字节数组
+     * @return 解密后的字节数组
+     */
+    private byte[] decryptBlock(byte[] block) {
+        BigInteger encryptedBlockBigInt = new BigInteger(1, block);
+        BigInteger decryptedBlockBigInt = encryptedBlockBigInt.modPow(d, n);
+        byte[] decryptedBlock = decryptedBlockBigInt.toByteArray();
+        return decryptedBlock;
+    }
+
+
 }
 

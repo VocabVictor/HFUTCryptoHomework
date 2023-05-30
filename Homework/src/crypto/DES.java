@@ -181,6 +181,13 @@ public class DES extends CryptoAlgorithm {
         return value; // 返回转换结果
     }
 
+    /**
+     * 对指定的64位块进行置换操作。
+     *
+     * @param block 要置换的64位块
+     * @param table 置换表
+     * @return 置换后的结果
+     */
     private static long permute(long block, int[] table) {
         long result = 0; // 初始化结果为 0
 
@@ -199,15 +206,17 @@ public class DES extends CryptoAlgorithm {
         return result;
     }
 
+
     /**
-     * 将一个long类型的数据转换成8个字节的字节数组
+     * 将 long 值转换为字节数组，并存储在指定的字节数组中的指定偏移量位置。
      *
-     * @param value  long类型的数据
-     * @param bytes  字节数组
-     * @param offset 起始偏移量
+     * @param value  要转换的 long 值
+     * @param bytes  存储转换结果的字节数组
+     * @param offset 转换结果在字节数组中的偏移量位置
      */
     private static void longToBytes(long value, byte[] bytes, int offset) {
         for (int i = 0; i < 8; i++) {
+            // 将 long 值右移 i * 8 位，然后通过与运算 (& 0xFF) 取出低 8 位的字节值
             bytes[offset + i] = (byte) ((value >>> (8 * i)) & 0xFF);
         }
     }
@@ -318,6 +327,11 @@ public class DES extends CryptoAlgorithm {
         return block; // 返回加密后的块
     }
 
+    /**
+     * 生成16个子密钥。
+     * 对给定的主密钥应用PC-1置换，将置换后的密钥分为两部分（c 和 d）。
+     * 根据移位表对 c 和 d 进行左移操作，并使用PC-2置换生成每一轮的子密钥。
+     */
     public void generateSubKeys() {
         // 对密钥应用 PC-1 置换
         long permutedChoice1 = permute(key, PC1);
@@ -338,6 +352,14 @@ public class DES extends CryptoAlgorithm {
         }
     }
 
+    /**
+     * 执行 F 函数。
+     * 将右半块进行扩展置换，与子密钥进行异或操作，进行 S 盒替代，最后进行 P 置换。
+     *
+     * @param right    右半块的值
+     * @param subKey   当前轮的子密钥
+     * @return F 函数的结果
+     */
     private int fFunction(int right, long subKey) {
         // 扩展置换
         long expandedRight = expand(right); // 对右半块进行扩展置换，将其从 32 位扩展到 48 位
@@ -355,71 +377,135 @@ public class DES extends CryptoAlgorithm {
     }
 
     /**
-     * 对一个64位的数据块进行解密
+     * 对加密的数据块进行解密。
+     * 执行初始置换，将数据块分为左半部分和右半部分，然后进行16轮DES算法的解密操作，
+     * 最后进行逆初始置换并返回解密结果。
      *
-     * @param encryptedBlock 64位的加密数据块
-     * @return 解密后的数据块
+     * @param encryptedBlock 加密的数据块
+     * @return 解密后的结果
      */
     private long decryptBlock(long encryptedBlock) {
-        // Perform the initial permutation
+        // 执行初始置换
         long permutedBlock = initialPermutation(encryptedBlock);
 
-        // Split the block into two halves
+        // 将数据块分为左半部分和右半部分
         int left = (int) (permutedBlock >>> 32);
         int right = (int) (permutedBlock & 0xFFFFFFFF);
 
-        // 16 rounds of the DES algorithm
+        // 16轮DES算法的解密操作
         for (int i = 15; i >= 0; i--) {
             int previousRight = right;
             right = left ^ fFunction(right, subKeys[i]);
             left = previousRight;
         }
 
-        // Join the swapped halves together
+        // 合并交换后的两半部分
         long preOutput = ((long) right << 32) | (left & 0xFFFFFFFFL);
 
-        // Perform the inverse initial permutation and return the result
+        // 执行逆初始置换并返回解密结果
         return inverseInitialPermutation(preOutput);
     }
 
-    // 执行初始置换操作
+
+    /**
+     * 执行初始置换操作。
+     * 调用 permute 方法并传入初始置换表 IP 进行置换操作。
+     *
+     * @param block 要执行初始置换的数据块
+     * @return 置换后的结果
+     */
     private long initialPermutation(long block) {
         // 初始置换是通过调用 permute 函数并传入初始置换表 IP 来实现的
         return permute(block, IP);
     }
 
-    // 执行逆初始置换操作
+    /**
+     * 执行逆初始置换操作。
+     * 调用 permute 方法并传入逆初始置换表 IIP 进行置换操作。
+     *
+     * @param block 要执行逆初始置换的数据块
+     * @return 置换后的结果
+     */
     private long inverseInitialPermutation(long block) {
         // 逆初始置换是通过调用 permute 函数并传入逆初始置换表 IIP 来实现的
         return permute(block, IIP);
     }
 
+    /**
+     * 执行扩展置换。
+     * 将给定的32位数据块进行扩展置换，将其从32位扩展到48位。
+     *
+     * @param block 要进行扩展置换的32位数据块
+     * @return 扩展置换后的48位结果
+     */
     private long expand(int block) {
         long result = 0;
+
+        // 遍历扩展置换表 E
         for (int i = 0; i < E.length; i++) {
+            // 将结果左移1位，为下一个位做准备
             result <<= 1;
+
+            // 取出 block 中的位值，这个位值的位置由扩展置换表 E 给出
+            // (32 - E[i]) 是因为位操作从右向左（也就是从低位向高位）计算，而扩展置换表 E 中的位序是从左向右（也就是从高位向低位）编号的
+            // (block >>> (32 - E[i])) & 1 这部分取出了相应位置的位值，然后与 result 进行或操作
             result |= (block >>> (32 - E[i])) & 1;
         }
+
+        // 返回扩展置换后的结果
         return result;
     }
 
+    /**
+     * 执行S盒替代。
+     * 对给定的48位数据块进行S盒替代，将其从48位压缩到32位。
+     *
+     * @param block 要进行S盒替代的48位数据块
+     * @return 替代后的32位结果
+     */
     private int sBoxSubstitution(long block) {
         int output = 0;
+
+        // 遍历8个S盒
         for (int i = 0; i < 8; i++) {
-            int row = (int) ((block >>> (42 - i * 6)) & 0x20 | (block >>> (43 - i * 6)) & 0x1);
-            int col = (int) (block >>> (42 - i * 6)) & 0x1E;
+            // 计算S盒中的行号和列号
+            int row = (int) ((block >>> (42 - i * 6 + 4)) & 0x02 | (block >>> (42 - i * 6)) & 0x01);
+            int col = (int) ((block >>> (42 - i * 6 + 1)) & 0x0F);
+
+            // 将输出结果左移4位，为下一个S盒结果的拼接做准备
             output <<= 4;
+
+            // 通过S盒进行替代，并与输出结果进行拼接
             output |= S[i][row][col];
         }
+
+        // 返回替代后的32位结果
         return output;
     }
 
+    /**
+     * 执行P置换。
+     * 对给定的32位数据块进行P置换，重新排列位的顺序。
+     *
+     * @param block 要进行P置换的32位数据块
+     * @return 置换后的32位结果
+     */
     private int pBoxPermutation(int block) {
         int output = 0;
+
+        // 遍历P置换表P
         for (int i = 0; i < P.length; i++) {
+            // 将输出结果左移1位，为下一个位做准备
             output <<= 1;
+
+            // 取出block中的位值，这个位值的位置由P置换表P给出
+            // (32 - P[i]) 是因为位操作从右向左（也就是从低位向高位）计算，而P置换表P中的位序是从左向右（也就是从高位向低位）编号的
+            // (block >>> (32 - P[i])) & 1 这部分取出了相应位置的位值，然后与output进行或操作
             output |= (block >>> (32 - P[i])) & 1;
         }
+
+        // 返回P置换后的结果
         return output;
     }
+
 }
